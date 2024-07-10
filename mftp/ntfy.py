@@ -7,7 +7,7 @@ from urllib.parse import quote
 from bs4 import BeautifulSoup as bs
 from notice import update_lsni, has_idx_mutated
 from endpoints import NOTICE_CONTENT_URL, ATTACHMENT_URL
-from env import NTFY_BASE_URL, NTFY_TOPIC, NTFY_TOPIC_ICON, NTFY_USER, NTFY_PASS
+from env import NTFY_BASE_URL, NTFY_TOPIC, NTFY_TOPIC_ICON, NTFY_USER, NTFY_PASS, HEIMDALL_COOKIE
 
 def ntfy_priority(subject):
     match subject:
@@ -51,6 +51,15 @@ def format_notice(notices, session):
         try:
             data = parseBody(notice, session, year, id_)
             body, links = parseLinks(data)
+            body += '''
+--------------
+
+⚠️ DISCLAIMER ⚠️
+
+MFTP is unofficial. Not affiliated with CDC, ERP, or Placement Committee. Do not rely solely on MFTP for updates. MFTP-related issues cannot be used as arguments with official authorities.
+
+--------------
+            '''
         except Exception as e:
             logging.error(f" Failed to parse notification body ~ {str(e)}")
 
@@ -70,7 +79,7 @@ def format_notice(notices, session):
         try:
             attachment = parseAttachment(session, year, id_)
         except Exception as e:
-            logging.error(f" Failed to parse mail attachment ~ {str(e)}")
+            logging.error(f" Failed to parse attachment ~ {str(e)}")
 
         if len(attachment) != 0:
             file_name = notification['Attachment']
@@ -80,7 +89,7 @@ def format_notice(notices, session):
                 break
         else: 
             notification['Attachment'] = None
-
+        
         notifications.append(notification)
   
     return notifications
@@ -102,20 +111,25 @@ def send(notifications, lsnif, notices):
                     "Priority": notification["Priority"],
                     "Icon": NTFY_TOPIC_ICON,
                     "Action": notification["Links"],
-                    "Markdown": "true"
+                    "Markdown": "false"
                 }
                 if NTFY_USER and NTFY_PASS:
                     headers['Authorization'] = f"Basic {str(base64.b64encode(bytes(NTFY_USER + ':' + NTFY_PASS, 'utf-8')), 'utf-8')}"
+
+                cookies = {}
+                if HEIMDALL_COOKIE:
+                    cookies = {'heimdall': HEIMDALL_COOKIE}
 
                 if notification['Attachment']:
                     headers['Filename'] = notification['Attachment']
                     response = requests.put(
                         request_url, 
                         headers=headers,
-                        data=open(notification['Attachment'], 'rb')
+                        data=open(notification['Attachment'], 'rb'),
+                        cookies=cookies
                     )
                 else:
-                    response = requests.put(request_url, headers=headers)
+                    response = requests.put(request_url, headers=headers, cookies=cookies)
 
             except Exception as e:
                 logging.error(f" Failed to request NTFY SERVER: {notification['Title']} ~ {str(e)}")
